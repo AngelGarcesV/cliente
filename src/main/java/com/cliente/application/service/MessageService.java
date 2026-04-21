@@ -5,12 +5,10 @@ import com.arquitectura.mensajeria.Respuesta;
 import com.arquitectura.mensajeria.enums.Accion;
 import com.arquitectura.mensajeria.enums.Estado;
 import com.arquitectura.mensajeria.enums.Protocolo;
-import com.arquitectura.mensajeria.payload.PayloadEnviarArchivo;
+import com.arquitectura.mensajeria.payload.PayloadEnviarMensaje;
 import com.cliente.domain.model.Message;
 import com.cliente.infrastructure.protocol.ServerJsonUtil;
 
-import java.time.LocalDateTime;
-import java.util.Base64;
 import java.util.List;
 
 public class MessageService {
@@ -27,7 +25,7 @@ public class MessageService {
     public List<Message> getMessages() throws Exception {
         Protocolo proto = resolveProtocolo();
         Mensaje<?> msg = ServerJsonUtil.buildRequest(
-                Accion.LISTAR_DOCUMENTOS, null,
+                Accion.LISTAR_MENSAJES, null,
                 ConnectionService.getInstance().getClientId(), proto);
 
         @SuppressWarnings("unchecked")
@@ -45,14 +43,10 @@ public class MessageService {
         String clientId = ConnectionService.getInstance().getClientId();
         Protocolo proto = resolveProtocolo();
 
-        // Encode message text as base64 content inside a document payload
-        String encoded = Base64.getEncoder().encodeToString(content.getBytes());
-        PayloadEnviarArchivo payload = new PayloadEnviarArchivo(
-                "mensaje_" + LocalDateTime.now(), encoded, "txt",
-                content.length(), clientId);
+        PayloadEnviarMensaje payload = new PayloadEnviarMensaje(clientId, content);
 
-        Mensaje<PayloadEnviarArchivo> msg = ServerJsonUtil.buildRequest(
-                Accion.ENVIAR_DOCUMENTO, payload, clientId, proto);
+        Mensaje<PayloadEnviarMensaje> msg = ServerJsonUtil.buildRequest(
+                Accion.ENVIAR_MENSAJE, payload, clientId, proto);
 
         ConnectionService.getInstance().send(msg);
     }

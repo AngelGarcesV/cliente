@@ -8,6 +8,7 @@ D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\domain\m
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\presentation\controller\DownloadDialogController.java
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\infrastructure\socket\SocketClient.java
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\infrastructure\protocol\ProtocolMessage.java
+D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\presentation\controller\HolaController.java
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\presentation\controller\LogsController.java
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\presentation\controller\SendMessageDialogController.java
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\presentation\controller\MessagesController.java
