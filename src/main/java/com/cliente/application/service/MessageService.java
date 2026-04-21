@@ -40,13 +40,13 @@ public class MessageService {
     }
 
     public void sendMessage(String content) throws Exception {
-        String clientId = ConnectionService.getInstance().getClientId();
+        String username = ConnectionService.getInstance().getUsername();
         Protocolo proto = resolveProtocolo();
 
-        PayloadEnviarMensaje payload = new PayloadEnviarMensaje(clientId, content);
+        PayloadEnviarMensaje payload = new PayloadEnviarMensaje(username, content);
 
         Mensaje<PayloadEnviarMensaje> msg = ServerJsonUtil.buildRequest(
-                Accion.ENVIAR_MENSAJE, payload, clientId, proto);
+                Accion.ENVIAR_MENSAJE, payload, username, proto);
 
         ConnectionService.getInstance().send(msg);
     }
