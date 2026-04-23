@@ -40,21 +40,45 @@ public class FilesController {
             new javafx.beans.property.SimpleStringProperty(cd.getValue().getFormattedSize()));
         colType.setCellValueFactory(new PropertyValueFactory<>("type"));
         colDate.setCellValueFactory(new PropertyValueFactory<>("date"));
+
+        // Hash: muestra el valor completo — la celda se ajusta al ancho de la columna.
+        // El usuario puede expandir la columna arrastrando para ver más contenido.
         colHash.setCellValueFactory(cd -> {
             String h = cd.getValue().getHashSha256();
-            String display = (h != null && !h.isBlank())
-                    ? h.substring(0, Math.min(16, h.length())) + "…"
-                    : "—";
-            return new javafx.beans.property.SimpleStringProperty(display);
+            return new javafx.beans.property.SimpleStringProperty(h != null && !h.isBlank() ? h : "—");
+        });
+        // Celda con texto que se recorta con ellipsis pero muestra completo al expandir
+        colHash.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setTooltip(null);
+                } else {
+                    setText(item);
+                    setTextOverrun(OverrunStyle.ELLIPSIS);
+                    setTooltip(new Tooltip(item));
+                }
+            }
         });
 
-        filesTable.setPlaceholder(new Label("No hay documentos disponibles."));
-
+        // Columna Origen: muestra LOCAL o EXTERNO (con IP si es externo)
         TableColumn<Document, String> colOrigen = new TableColumn<>("Origen");
-        colOrigen.setCellValueFactory(new PropertyValueFactory<>("origen"));
-        colOrigen.setPrefWidth(80);
+        colOrigen.setCellValueFactory(cd -> {
+            Document d = cd.getValue();
+            String origen = d.getOrigen();
+            if ("EXTERNO".equals(origen)) {
+                String ip = d.getIpRemitente();
+                String display = (ip != null && !ip.isBlank()) ? "EXTERNO (" + ip + ")" : "EXTERNO";
+                return new javafx.beans.property.SimpleStringProperty(display);
+            }
+            return new javafx.beans.property.SimpleStringProperty(origen != null ? origen : "");
+        });
+        colOrigen.setPrefWidth(130);
         filesTable.getColumns().add(colOrigen);
 
+        filesTable.setPlaceholder(new Label("No hay documentos disponibles."));
         filesTable.getSelectionModel().selectedItemProperty().addListener(
             (obs, old, newVal) -> downloadButton.setDisable(newVal == null));
         downloadButton.setDisable(true);

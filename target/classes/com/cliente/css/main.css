@@ -390,6 +390,13 @@
     -fx-text-fill: #374151;
 }
 
+.message-hash {
+    -fx-font-size: 11px;
+    -fx-font-family: "Monospace";
+    -fx-text-fill: #6b7280;
+    -fx-padding: 4 0 0 0;
+}
+
 /* ═══════════════════════════════════════════
    UPLOAD — DROP ZONE
 ═══════════════════════════════════════════ */

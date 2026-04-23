@@ -89,13 +89,15 @@ public class MessagesController {
         VBox card = new VBox(6);
         card.getStyleClass().add("message-card");
 
+        // ── Header: cliente + badge origen + timestamp ──
         HBox header = new HBox(8);
         header.setAlignment(Pos.CENTER_LEFT);
 
         Label clientLabel = new Label(message.getClientId() != null ? message.getClientId() : "—");
         clientLabel.getStyleClass().add("message-client-id");
 
-        Label origenLabel = new Label(message.getOrigen() != null ? message.getOrigen() : "");
+        String origenTexto = resolverTextoOrigen(message);
+        Label origenLabel = new Label(origenTexto);
         origenLabel.getStyleClass().add(
             "LOCAL".equals(message.getOrigen()) ? "badge-local" : "badge-externo");
 
@@ -107,17 +109,38 @@ public class MessagesController {
 
         header.getChildren().addAll(clientLabel, origenLabel, spacer, timestampLabel);
 
+        // ── Contenido del mensaje ──
         Label contentLabel = new Label(message.getContent() != null ? message.getContent() : "");
         contentLabel.getStyleClass().add("message-content");
         contentLabel.setWrapText(true);
 
+        // ── SHA-256 completo (seleccionable, con wrap) ──
         String hash = message.getHashSha256();
-        Label hashLabel = new Label(hash != null && !hash.isBlank()
-                ? "SHA-256: " + hash.substring(0, Math.min(16, hash.length())) + "…"
-                : "SHA-256: —");
+        Label hashLabel = new Label("SHA-256: " + (hash != null && !hash.isBlank() ? hash : "—"));
         hashLabel.getStyleClass().add("message-hash");
+        hashLabel.setWrapText(true);
 
-        card.getChildren().addAll(header, contentLabel, hashLabel);
+        // ── Contenido cifrado (seleccionable, con wrap) ──
+        String cifrado = message.getContenidoCifrado();
+        Label cifradoLabel = new Label("Cifrado: " + (cifrado != null && !cifrado.isBlank() ? cifrado : "—"));
+        cifradoLabel.getStyleClass().add("message-hash");
+        cifradoLabel.setWrapText(true);
+
+        card.getChildren().addAll(header, contentLabel, hashLabel, cifradoLabel);
         return card;
+    }
+
+    /**
+     * Si el origen es EXTERNO, muestra la IP entre paréntesis.
+     * Si es LOCAL, solo muestra "LOCAL".
+     */
+    private String resolverTextoOrigen(Message message) {
+        String origen = message.getOrigen();
+        if (origen == null) return "";
+        if ("EXTERNO".equals(origen)) {
+            String ip = message.getIpRemitente();
+            return (ip != null && !ip.isBlank()) ? "EXTERNO (" + ip + ")" : "EXTERNO";
+        }
+        return origen;
     }
 }

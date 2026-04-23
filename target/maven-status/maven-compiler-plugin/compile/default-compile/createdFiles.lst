@@ -10,6 +10,7 @@ com\cliente\application\service\ConnectionService.class
 com\cliente\application\service\FileService$2.class
 com\cliente\presentation\controller\MainController.class
 com\cliente\infrastructure\socket\TcpSocketClient$StreamProgressCallback.class
+com\cliente\presentation\controller\FilesController$1.class
 com\cliente\presentation\controller\PanelController.class
 com\cliente\application\service\MessageService.class
 com\cliente\presentation\controller\SendMessageDialogController.class

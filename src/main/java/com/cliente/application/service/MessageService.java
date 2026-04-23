@@ -11,9 +11,13 @@ import com.cliente.infrastructure.persistence.LocalDocumentRepository;
 import com.cliente.infrastructure.protocol.ServerJsonUtil;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class MessageService {
 
+    private static final Logger LOG = Logger.getLogger(MessageService.class.getName());
     private static MessageService instance;
 
     private MessageService() {}
@@ -51,13 +55,27 @@ public class MessageService {
 
         ConnectionService.getInstance().send(msg);
 
-        // Persistir localmente en H2
-        new LocalDocumentRepository().guardarMensajeEnviado(
-                msg.getMetadata().getIdMensaje(),
-                content,
-                ConnectionService.getInstance().getHost(),
-                ConnectionService.getInstance().getPort()
-        );
+        // Persistir localmente en H2 de forma asíncrona — no bloquea el hilo de JavaFX
+        String msgId    = msg.getMetadata().getIdMensaje();
+        String host     = ConnectionService.getInstance().getHost();
+        int    puerto   = ConnectionService.getInstance().getPort();
+
+        CompletableFuture.runAsync(() -> {
+            try {
+                new LocalDocumentRepository().guardarMensajeEnviado(
+                        msgId,
+                        username,
+                        null,         // ip_remitente: no disponible en el cliente
+                        content,
+                        null,         // hash_sha256: no calculado para mensajes de texto
+                        null,         // contenido_cifrado: no disponible en el cliente
+                        host,
+                        puerto
+                );
+            } catch (Exception e) {
+                LOG.log(Level.WARNING, "Error persistiendo mensaje en H2 (no-bloqueante): " + e.getMessage(), e);
+            }
+        });
     }
 
     private Protocolo resolveProtocolo() {

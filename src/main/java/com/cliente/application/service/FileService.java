@@ -26,9 +26,13 @@ import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class FileService {
 
+    private static final Logger LOG = Logger.getLogger(FileService.class.getName());
     private static FileService instance;
 
     private FileService() {}
@@ -132,11 +136,35 @@ public class FileService {
                 updateMessage("Completado: " + file.getName());
                 updateProgress(fileSize, fileSize);
 
-                // Persistir localmente en H2
-                new LocalDocumentRepository().guardarArchivoEnviado(
-                        transferId, file.getName(), ext, fileSize,
-                        conn.getHost(), conn.getPort()
-                );
+                // Persistir localmente en H2 de forma asíncrona — no bloquea el hilo de la tarea
+                String snapshotId     = transferId;
+                String snapshotName   = file.getName();
+                String snapshotExt    = ext;
+                long   snapshotSize   = fileSize;
+                String snapshotHost   = conn.getHost();
+                int    snapshotPort   = conn.getPort();
+                String snapshotHash   = hashFinal;
+                String snapshotUser   = conn.getUsername();
+
+                CompletableFuture.runAsync(() -> {
+                    try {
+                        new LocalDocumentRepository().guardarArchivoEnviado(
+                                snapshotId,
+                                snapshotUser,
+                                null,           // ip_remitente: no disponible en el cliente
+                                snapshotName,
+                                snapshotExt,
+                                null,           // ruta_archivo: el cliente no conoce la ruta en el servidor
+                                snapshotHash,
+                                null,           // contenido_cifrado: no disponible en el cliente
+                                snapshotSize,
+                                snapshotHost,
+                                snapshotPort
+                        );
+                    } catch (Exception e) {
+                        LOG.log(Level.WARNING, "Error persistiendo archivo en H2 (no-bloqueante): " + e.getMessage(), e);
+                    }
+                });
 
                 return null;
             }
