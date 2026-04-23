@@ -14,7 +14,7 @@ public final class H2DatabaseManager {
         return DriverManager.getConnection(URL, USER, PASSWORD);
     }
 
-    public static void giinicializar() {
+    public static void inicializar() {
         try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS mensajes_enviados (
