@@ -5,10 +5,17 @@ import com.cliente.infrastructure.protocol.ProtocolConstants;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 /**
- * Opens a fresh TCP connection for every sendAndReceive call, matching the
- * server's one-request-per-connection model.
+ * Cliente TCP.
+ *
+ * Maneja dos modos de comunicación con el servidor:
+ *
+ * 1. JSON (control): sendAndReceive() — abre conexión, envía JSON, lee respuesta, cierra.
+ * 2. Streaming (datos): sendFileStream() — envía byte de señal STREAM_SIGNAL seguido de
+ *    frames binarios. La conexión se mantiene abierta durante toda la transferencia.
+ *    El servidor responde con ACK (0x01) por cada chunk recibido.
  */
 public class TcpSocketClient implements SocketClient {
 
@@ -23,6 +30,9 @@ public class TcpSocketClient implements SocketClient {
         this.initialized = true;
     }
 
+    /**
+     * Envía un mensaje JSON y espera la respuesta. Una conexión por llamada.
+     */
     @Override
     public String sendAndReceive(String json) throws Exception {
         try (Socket socket = new Socket()) {
@@ -30,9 +40,9 @@ public class TcpSocketClient implements SocketClient {
             socket.setSoTimeout(ProtocolConstants.READ_TIMEOUT);
 
             BufferedWriter writer = new BufferedWriter(
-                    new OutputStreamWriter(socket.getOutputStream(), "UTF-8"));
+                    new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
             BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(socket.getInputStream(), "UTF-8"));
+                    new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
 
             writer.write(json);
             writer.newLine();
@@ -44,6 +54,160 @@ public class TcpSocketClient implements SocketClient {
         }
     }
 
+    /**
+     * Transfiere un archivo al servidor usando streaming binario sobre una
+     * conexión TCP persistente.
+     *
+     * Protocolo:
+     * 1. Envía el byte de señal STREAM_SIGNAL (0x02).
+     * 2. Por cada chunk:
+     *    a. Envía header: transferId(36B) + chunkIndex(8B long) + chunkSize(4B int).
+     *    b. Envía datos del chunk.
+     *    c. Espera ACK (1 byte, 0x01). Si recibe NACK (0x00), lanza excepción.
+     *
+     * @param transferId  UUID de la transferencia (debe coincidir con INICIAR_STREAM)
+     * @param fis         FileInputStream del archivo a enviar
+     * @param chunkSize   tamaño de cada chunk en bytes
+     * @param progressCb  callback invocado con (bytesEnviados, totalBytes) por chunk
+     * @param totalBytes  tamaño total del archivo en bytes
+     * @throws Exception  si ocurre error de red o el servidor rechaza un chunk
+     */
+    public void sendFileStream(String transferId, FileInputStream fis,
+                               int chunkSize, long totalBytes,
+                               StreamProgressCallback progressCb) throws Exception {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(host, port), ProtocolConstants.CONNECT_TIMEOUT);
+            // Sin timeout de lectura durante streaming — el servidor puede tardar en disco
+            socket.setSoTimeout(0);
+
+            OutputStream os = socket.getOutputStream();
+            InputStream is  = socket.getInputStream();
+
+            // Señal de streaming
+            os.write(ProtocolConstants.STREAM_SIGNAL);
+            os.flush();
+
+            byte[] buffer = new byte[chunkSize];
+            long chunkIndex = 0;
+            long totalEnviado = 0;
+            int read;
+
+            while ((read = fis.read(buffer)) != -1) {
+                byte[] idBytes = padTransferId(transferId);
+
+                // Header: transferId(36) + chunkIndex(8) + chunkSize(4) = 48 bytes
+                ByteBuffer header = ByteBuffer.allocate(36 + 8 + 4);
+                header.put(idBytes);
+                header.putLong(chunkIndex);
+                header.putInt(read);
+
+                os.write(header.array());
+                os.write(buffer, 0, read);
+                os.flush();
+
+                // Esperar ACK
+                int ack = is.read();
+                if (ack != 0x01) {
+                    throw new IOException("Servidor rechazó el chunk " + chunkIndex
+                            + " (NACK recibido). Transferencia abortada.");
+                }
+
+                totalEnviado += read;
+                chunkIndex++;
+
+                if (progressCb != null) {
+                    progressCb.onProgress(totalEnviado, totalBytes);
+                }
+            }
+        }
+    }
+
+    /**
+     * Recibe un archivo del servidor por streaming TCP.
+     *
+     * Protocolo:
+     * 1. Envía byte de señal 0x03.
+     * 2. Envía el transferId (36 bytes fijos).
+     * 3. Por cada chunk que llega:
+     *    a. Lee header: transferId(36B) + chunkIndex(8B) + chunkSize(4B).
+     *    b. Lee chunkSize bytes de datos.
+     *    c. Escribe en el archivo destino.
+     *    d. Envía ACK (0x01).
+     * 4. Termina cuando se recibieron totalChunks chunks.
+     *
+     * @param transferId   UUID de la descarga (obtenido de SOLICITAR_STREAM)
+     * @param totalChunks  número de chunks a recibir (del payload INICIAR_DESCARGA)
+     * @param destino      path del archivo donde se guardará
+     * @param totalBytes   tamaño total para calcular progreso
+     * @param progressCb   callback de progreso (bytes recibidos, total)
+     */
+    public void receiveFileStream(String transferId, long totalChunks, java.nio.file.Path destino,
+                                  long totalBytes, StreamProgressCallback progressCb) throws Exception {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(host, port), ProtocolConstants.CONNECT_TIMEOUT);
+            socket.setSoTimeout(0); // sin timeout durante streaming
+
+            OutputStream os = socket.getOutputStream();
+            InputStream  is = socket.getInputStream();
+
+            // Señal + transferId
+            os.write(0x03);
+            os.write(padTransferId(transferId));
+            os.flush();
+
+            long totalRecibido = 0;
+
+            try (java.nio.channels.FileChannel fc = java.nio.channels.FileChannel.open(destino,
+                    java.nio.file.StandardOpenOption.WRITE,
+                    java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.TRUNCATE_EXISTING)) {
+
+                for (long i = 0; i < totalChunks; i++) {
+                    // Leer header: 36 + 8 + 4 = 48 bytes
+                    byte[] header = leerExacto(is, 48);
+                    if (header == null) throw new IOException("EOF inesperado leyendo header del chunk " + i);
+
+                    ByteBuffer hBuf = ByteBuffer.wrap(header, 36, 12);
+                    long chunkIndex = hBuf.getLong();
+                    int  chunkSize  = hBuf.getInt();
+
+                    // Leer datos
+                    byte[] datos = leerExacto(is, chunkSize);
+                    if (datos == null) throw new IOException("EOF inesperado leyendo datos del chunk " + i);
+
+                    // Escribir a disco
+                    ByteBuffer bb = ByteBuffer.wrap(datos);
+                    while (bb.hasRemaining()) fc.write(bb);
+
+                    // ACK
+                    os.write(0x01);
+                    os.flush();
+
+                    totalRecibido += chunkSize;
+                    if (progressCb != null) progressCb.onProgress(totalRecibido, totalBytes);
+                }
+            }
+        }
+    }
+
+    private byte[] leerExacto(InputStream is, int length) throws IOException {
+        byte[] buf = new byte[length];
+        int offset = 0;
+        while (offset < length) {
+            int n = is.read(buf, offset, length - offset);
+            if (n == -1) return null;
+            offset += n;
+        }
+        return buf;
+    }
+    private byte[] padTransferId(String transferId) {
+        byte[] raw = transferId.getBytes(StandardCharsets.UTF_8);
+        if (raw.length == 36) return raw;
+        byte[] padded = new byte[36];
+        System.arraycopy(raw, 0, padded, 0, Math.min(raw.length, 36));
+        return padded;
+    }
+
     @Override
     public void disconnect() {
         initialized = false;
@@ -52,5 +216,10 @@ public class TcpSocketClient implements SocketClient {
     @Override
     public boolean isConnected() {
         return initialized;
+    }
+
+    @FunctionalInterface
+    public interface StreamProgressCallback {
+        void onProgress(long bytesEnviados, long totalBytes);
     }
 }

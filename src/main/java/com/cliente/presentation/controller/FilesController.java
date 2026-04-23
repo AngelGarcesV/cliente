@@ -11,10 +11,14 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.List;
 
 public class FilesController {
@@ -47,6 +51,28 @@ public class FilesController {
     @FXML
     private void handleRefresh() {
         loadFiles();
+    }
+
+    @FXML
+    private void handleExport() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Exportar Documentos");
+        chooser.setInitialFileName("documentos.csv");
+        chooser.getExtensionFilters().add(
+            new FileChooser.ExtensionFilter("CSV", "*.csv"));
+        File file = chooser.showSaveDialog(filesTable.getScene().getWindow());
+        if (file == null) return;
+
+        List<Document> items = filesTable.getItems();
+        try (PrintWriter pw = new PrintWriter(new FileWriter(file))) {
+            pw.println("Nombre,Tamaño,Tipo,Fecha");
+            for (Document d : items)
+                pw.printf("\"%s\",\"%s\",\"%s\",\"%s\"%n",
+                    d.getName(), d.getFormattedSize(), d.getType(), d.getDate());
+            new Alert(Alert.AlertType.INFORMATION, "Documentos exportados correctamente.").showAndWait();
+        } catch (IOException ex) {
+            new Alert(Alert.AlertType.ERROR, "Error al exportar: " + ex.getMessage()).showAndWait();
+        }
     }
 
     @FXML

@@ -7,7 +7,13 @@ import javafx.fxml.FXML;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
+import javafx.stage.FileChooser;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.List;
 
 public class MessagesController {
@@ -16,6 +22,8 @@ public class MessagesController {
     @FXML private ScrollPane scrollPane;
     @FXML private Label statusLabel;
     @FXML private Button refreshButton;
+
+    private final List<Message> currentMessages = new ArrayList<>();
 
     @FXML
     public void initialize() {
@@ -28,6 +36,29 @@ public class MessagesController {
         loadMessages();
     }
 
+    @FXML
+    private void handleExport() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Exportar Mensajes");
+        chooser.setInitialFileName("mensajes.csv");
+        chooser.getExtensionFilters().add(
+            new FileChooser.ExtensionFilter("CSV", "*.csv"));
+        File file = chooser.showSaveDialog(messagesContainer.getScene().getWindow());
+        if (file == null) return;
+
+        try (PrintWriter pw = new PrintWriter(new FileWriter(file))) {
+            pw.println("Cliente,Contenido,Timestamp");
+            for (Message m : currentMessages)
+                pw.printf("\"%s\",\"%s\",\"%s\"%n",
+                    m.getClientId() != null ? m.getClientId() : "",
+                    m.getContent()  != null ? m.getContent().replace("\"", "\"\"") : "",
+                    m.getTimestamp() != null ? m.getTimestamp() : "");
+            new Alert(Alert.AlertType.INFORMATION, "Mensajes exportados correctamente.").showAndWait();
+        } catch (IOException ex) {
+            new Alert(Alert.AlertType.ERROR, "Error al exportar: " + ex.getMessage()).showAndWait();
+        }
+    }
+
     private void loadMessages() {
         statusLabel.setText("Cargando mensajes...");
         refreshButton.setDisable(true);
@@ -36,6 +67,8 @@ public class MessagesController {
             try {
                 List<Message> messages = MessageService.getInstance().getMessages();
                 Platform.runLater(() -> {
+                    currentMessages.clear();
+                    currentMessages.addAll(messages);
                     messagesContainer.getChildren().clear();
                     for (Message m : messages) {
                         messagesContainer.getChildren().add(buildMessageCard(m));
