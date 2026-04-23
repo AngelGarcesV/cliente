@@ -4,6 +4,10 @@ public class Message {
     private String clientId;
     private String content;
     private String timestamp;
+    private String hashSha256;
+    private String contenidoCifrado;
+    private String ipRemitente;
+    private String origen;
 
     public Message() {}
 
@@ -19,4 +23,12 @@ public class Message {
     public void setContent(String content) { this.content = content; }
     public String getTimestamp() { return timestamp; }
     public void setTimestamp(String timestamp) { this.timestamp = timestamp; }
+    public String getHashSha256() { return hashSha256; }
+    public void setHashSha256(String hashSha256) { this.hashSha256 = hashSha256; }
+    public String getContenidoCifrado() { return contenidoCifrado; }
+    public void setContenidoCifrado(String contenidoCifrado) { this.contenidoCifrado = contenidoCifrado; }
+    public String getIpRemitente() { return ipRemitente; }
+    public void setIpRemitente(String ipRemitente) { this.ipRemitente = ipRemitente; }
+    public String getOrigen() { return origen; }
+    public void setOrigen(String origen) { this.origen = origen; }
 }

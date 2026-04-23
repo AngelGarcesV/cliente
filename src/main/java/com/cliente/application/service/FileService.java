@@ -10,6 +10,7 @@ import com.arquitectura.mensajeria.payload.PayloadIniciarDescarga;
 import com.arquitectura.mensajeria.payload.PayloadIniciarStream;
 import com.arquitectura.mensajeria.payload.PayloadSolicitarStream;
 import com.cliente.domain.enums.DownloadMode;
+import com.cliente.infrastructure.persistence.LocalDocumentRepository;
 import com.cliente.domain.model.Document;
 import com.cliente.infrastructure.protocol.ProtocolConstants;
 import com.cliente.infrastructure.protocol.ServerJsonUtil;
@@ -130,6 +131,13 @@ public class FileService {
 
                 updateMessage("Completado: " + file.getName());
                 updateProgress(fileSize, fileSize);
+
+                // Persistir localmente en H2
+                new LocalDocumentRepository().guardarArchivoEnviado(
+                        transferId, file.getName(), ext, fileSize,
+                        conn.getHost(), conn.getPort()
+                );
+
                 return null;
             }
         };

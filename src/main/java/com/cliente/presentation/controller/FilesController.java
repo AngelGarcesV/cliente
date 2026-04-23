@@ -28,6 +28,7 @@ public class FilesController {
     @FXML private TableColumn<Document, String> colSize;
     @FXML private TableColumn<Document, String> colType;
     @FXML private TableColumn<Document, String> colDate;
+    @FXML private TableColumn<Document, String> colHash;
     @FXML private Label statusLabel;
     @FXML private Button refreshButton;
     @FXML private Button downloadButton;
@@ -39,8 +40,21 @@ public class FilesController {
             new javafx.beans.property.SimpleStringProperty(cd.getValue().getFormattedSize()));
         colType.setCellValueFactory(new PropertyValueFactory<>("type"));
         colDate.setCellValueFactory(new PropertyValueFactory<>("date"));
+        colHash.setCellValueFactory(cd -> {
+            String h = cd.getValue().getHashSha256();
+            String display = (h != null && !h.isBlank())
+                    ? h.substring(0, Math.min(16, h.length())) + "…"
+                    : "—";
+            return new javafx.beans.property.SimpleStringProperty(display);
+        });
 
         filesTable.setPlaceholder(new Label("No hay documentos disponibles."));
+
+        TableColumn<Document, String> colOrigen = new TableColumn<>("Origen");
+        colOrigen.setCellValueFactory(new PropertyValueFactory<>("origen"));
+        colOrigen.setPrefWidth(80);
+        filesTable.getColumns().add(colOrigen);
+
         filesTable.getSelectionModel().selectedItemProperty().addListener(
             (obs, old, newVal) -> downloadButton.setDisable(newVal == null));
         downloadButton.setDisable(true);
@@ -65,10 +79,11 @@ public class FilesController {
 
         List<Document> items = filesTable.getItems();
         try (PrintWriter pw = new PrintWriter(new FileWriter(file))) {
-            pw.println("Nombre,Tamaño,Tipo,Fecha");
+            pw.println("Nombre,Tamaño,Tipo,Fecha,SHA-256");
             for (Document d : items)
-                pw.printf("\"%s\",\"%s\",\"%s\",\"%s\"%n",
-                    d.getName(), d.getFormattedSize(), d.getType(), d.getDate());
+                pw.printf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"%n",
+                    d.getName(), d.getFormattedSize(), d.getType(), d.getDate(),
+                    d.getHashSha256() != null ? d.getHashSha256() : "");
             new Alert(Alert.AlertType.INFORMATION, "Documentos exportados correctamente.").showAndWait();
         } catch (IOException ex) {
             new Alert(Alert.AlertType.ERROR, "Error al exportar: " + ex.getMessage()).showAndWait();

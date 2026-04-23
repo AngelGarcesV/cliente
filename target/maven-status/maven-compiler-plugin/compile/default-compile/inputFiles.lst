@@ -8,8 +8,10 @@ D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\domain\m
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\presentation\controller\DownloadDialogController.java
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\infrastructure\socket\SocketClient.java
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\infrastructure\protocol\ProtocolMessage.java
+D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\infrastructure\persistence\H2DatabaseManager.java
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\presentation\controller\HolaController.java
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\presentation\controller\LogsController.java
+D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\infrastructure\persistence\LocalDocumentRepository.java
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\presentation\controller\SendMessageDialogController.java
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\presentation\controller\MessagesController.java
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\application\service\FileService.java
@@ -23,6 +25,7 @@ D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\domain\m
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\infrastructure\socket\UdpSocketClient.java
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\presentation\controller\PanelController.java
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\domain\model\Client.java
+D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\domain\model\PaginatedResult.java
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\domain\enums\DownloadMode.java
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\domain\enums\Protocol.java
 D:\Universidad\ROGER\CLIENTE-SERVIDOR\CLIENTE\src\main\java\com\cliente\infrastructure\protocol\ServerJsonUtil.java

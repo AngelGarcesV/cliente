@@ -5,6 +5,8 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
 
+import com.cliente.infrastructure.persistence.H2DatabaseManager;
+
 import java.io.IOException;
 
 public class MainApp extends Application {
@@ -13,6 +15,7 @@ public class MainApp extends Application {
 
     @Override
     public void start(Stage stage) throws IOException {
+        H2DatabaseManager.inicializar();
         primaryStage = stage;
         primaryStage.setResizable(false);
         showConnectionScreen();
@@ -43,6 +46,11 @@ public class MainApp extends Application {
 
     public static Stage getPrimaryStage() {
         return primaryStage;
+    }
+
+    @Override
+    public void stop() {
+        H2DatabaseManager.cerrar();
     }
 
     public static void main(String[] args) {

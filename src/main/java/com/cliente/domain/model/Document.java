@@ -6,6 +6,9 @@ public class Document {
     private long size;
     private String type;
     private String date;
+    private String hashSha256;
+    private String ipRemitente;
+    private String origen;
 
     public Document() {}
 
@@ -27,6 +30,12 @@ public class Document {
     public void setType(String type) { this.type = type; }
     public String getDate() { return date; }
     public void setDate(String date) { this.date = date; }
+    public String getHashSha256() { return hashSha256; }
+    public void setHashSha256(String hashSha256) { this.hashSha256 = hashSha256; }
+    public String getIpRemitente() { return ipRemitente; }
+    public void setIpRemitente(String ipRemitente) { this.ipRemitente = ipRemitente; }
+    public String getOrigen() { return origen; }
+    public void setOrigen(String origen) { this.origen = origen; }
 
     public String getFormattedSize() {
         if (size < 1024) return size + " B";

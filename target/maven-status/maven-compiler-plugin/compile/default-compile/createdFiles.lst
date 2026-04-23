@@ -20,13 +20,16 @@ com\cliente\presentation\controller\UploadController$1.class
 com\cliente\presentation\controller\LogsController.class
 com\cliente\presentation\controller\UploadController.class
 com\cliente\domain\model\LogEntry.class
+com\cliente\domain\model\PaginatedResult.class
 com\cliente\infrastructure\protocol\ProtocolMessage.class
+com\cliente\infrastructure\persistence\LocalDocumentRepository.class
 com\cliente\presentation\controller\FilesController.class
 module-info.class
 com\cliente\infrastructure\protocol\ServerJsonUtil.class
 com\cliente\presentation\controller\HolaController.class
 com\cliente\application\service\ClientService.class
 com\cliente\application\service\LogService.class
+com\cliente\infrastructure\persistence\H2DatabaseManager.class
 com\cliente\presentation\controller\ClientsController.class
 com\cliente\infrastructure\socket\SocketClient.class
 com\cliente\domain\enums\Protocol.class

@@ -24,10 +24,11 @@
     <!-- Table -->
     <TableView fx:id="filesTable" VBox.vgrow="ALWAYS" styleClass="data-table">
         <columns>
-            <TableColumn fx:id="colName" text="Nombre"     prefWidth="280"/>
-            <TableColumn fx:id="colSize" text="Tamaño"     prefWidth="110"/>
-            <TableColumn fx:id="colType" text="Tipo"       prefWidth="110"/>
-            <TableColumn fx:id="colDate" text="Fecha"      prefWidth="160"/>
+            <TableColumn fx:id="colName" text="Nombre"     prefWidth="240"/>
+            <TableColumn fx:id="colSize" text="Tamaño"     prefWidth="100"/>
+            <TableColumn fx:id="colType" text="Tipo"       prefWidth="90"/>
+            <TableColumn fx:id="colDate" text="Fecha"      prefWidth="150"/>
+            <TableColumn fx:id="colHash" text="SHA-256"    prefWidth="180"/>
         </columns>
     </TableView>
 

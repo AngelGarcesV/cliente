@@ -89,11 +89,15 @@ public class MessagesController {
         VBox card = new VBox(6);
         card.getStyleClass().add("message-card");
 
-        HBox header = new HBox();
+        HBox header = new HBox(8);
         header.setAlignment(Pos.CENTER_LEFT);
 
         Label clientLabel = new Label(message.getClientId() != null ? message.getClientId() : "—");
         clientLabel.getStyleClass().add("message-client-id");
+
+        Label origenLabel = new Label(message.getOrigen() != null ? message.getOrigen() : "");
+        origenLabel.getStyleClass().add(
+            "LOCAL".equals(message.getOrigen()) ? "badge-local" : "badge-externo");
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -101,13 +105,19 @@ public class MessagesController {
         Label timestampLabel = new Label(message.getTimestamp() != null ? message.getTimestamp() : "");
         timestampLabel.getStyleClass().add("message-timestamp");
 
-        header.getChildren().addAll(clientLabel, spacer, timestampLabel);
+        header.getChildren().addAll(clientLabel, origenLabel, spacer, timestampLabel);
 
         Label contentLabel = new Label(message.getContent() != null ? message.getContent() : "");
         contentLabel.getStyleClass().add("message-content");
         contentLabel.setWrapText(true);
 
-        card.getChildren().addAll(header, contentLabel);
+        String hash = message.getHashSha256();
+        Label hashLabel = new Label(hash != null && !hash.isBlank()
+                ? "SHA-256: " + hash.substring(0, Math.min(16, hash.length())) + "…"
+                : "SHA-256: —");
+        hashLabel.getStyleClass().add("message-hash");
+
+        card.getChildren().addAll(header, contentLabel, hashLabel);
         return card;
     }
 }

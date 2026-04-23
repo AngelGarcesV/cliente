@@ -511,3 +511,24 @@
 .scroll-bar:horizontal .track {
     -fx-background-color: transparent;
 }
+
+/* ═══════════════════════════════════════════
+   ORIGEN BADGES (LOCAL / EXTERNO)
+═══════════════════════════════════════════ */
+.badge-local {
+    -fx-background-color: #d4edda;
+    -fx-text-fill: #155724;
+    -fx-padding: 2 8;
+    -fx-background-radius: 10;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.badge-externo {
+    -fx-background-color: #cce5ff;
+    -fx-text-fill: #004085;
+    -fx-padding: 2 8;
+    -fx-background-radius: 10;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}

@@ -7,6 +7,7 @@ import com.arquitectura.mensajeria.enums.Estado;
 import com.arquitectura.mensajeria.enums.Protocolo;
 import com.arquitectura.mensajeria.payload.PayloadEnviarMensaje;
 import com.cliente.domain.model.Message;
+import com.cliente.infrastructure.persistence.LocalDocumentRepository;
 import com.cliente.infrastructure.protocol.ServerJsonUtil;
 
 import java.util.List;
@@ -49,6 +50,14 @@ public class MessageService {
                 Accion.ENVIAR_MENSAJE, payload, username, proto);
 
         ConnectionService.getInstance().send(msg);
+
+        // Persistir localmente en H2
+        new LocalDocumentRepository().guardarMensajeEnviado(
+                msg.getMetadata().getIdMensaje(),
+                content,
+                ConnectionService.getInstance().getHost(),
+                ConnectionService.getInstance().getPort()
+        );
     }
 
     private Protocolo resolveProtocolo() {

@@ -80,6 +80,16 @@ public class ConnectionService {
     }
 
     public void disconnect() {
+        if (connected && socketClient != null) {
+            try {
+                Protocolo proto = (protocol == Protocol.TCP) ? Protocolo.TCP : Protocolo.UDP;
+                Mensaje<?> msg = ServerJsonUtil.buildRequest(Accion.DESCONECTAR, null, clientId, proto);
+                String json = ServerJsonUtil.toJson(msg);
+                socketClient.sendAndReceive(json);
+            } catch (Exception ignored) {
+                // Best-effort — si el servidor no responde, desconectamos localmente igual
+            }
+        }
         if (socketClient != null) socketClient.disconnect();
         connected = false;
         clientId = null;
