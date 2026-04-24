@@ -29,6 +29,7 @@ module-info.class
 com\cliente\infrastructure\protocol\ServerJsonUtil.class
 com\cliente\presentation\controller\HolaController.class
 com\cliente\application\service\ClientService.class
+com\cliente\application\service\FileService$ProgressCallback.class
 com\cliente\application\service\LogService.class
 com\cliente\infrastructure\persistence\H2DatabaseManager.class
 com\cliente\presentation\controller\ClientsController.class

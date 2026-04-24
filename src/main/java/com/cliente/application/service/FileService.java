@@ -27,6 +27,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -134,15 +135,11 @@ public class FileService {
 
                 CompletableFuture.runAsync(() -> {
                     try {
-                        LocalDocumentRepository repo = new LocalDocumentRepository();
-                        repo.guardarArchivoEnviado(
+                        new LocalDocumentRepository().guardarArchivoEnviado(
                                 snapshotId, snapshotUser, null,
                                 snapshotName, snapshotExt, null,
-                                snapshotHash, null,
+                                snapshotHash, null, contenidoFinal,
                                 snapshotSize, snapshotHost, snapshotPort);
-                        if (contenidoFinal != null) {
-                            repo.guardarContenidoArchivo(snapshotId, contenidoFinal);
-                        }
                     } catch (Exception e) {
                         LOG.log(Level.WARNING, "Error persistiendo archivo en H2: " + e.getMessage(), e);
                     }
@@ -183,26 +180,36 @@ public class FileService {
         return Base64.getEncoder().encodeToString(digest.digest());
     }
 
+    @FunctionalInterface
+    private interface ProgressCallback {
+        void update(long done, long total);
+    }
+
     public Task<File> createDownloadTask(Document document, DownloadMode mode, Path destination) {
         return new Task<>() {
             @Override
             protected File call() throws Exception {
                 updateMessage("Buscando " + document.getName() + " en caché local...");
-                updateProgress(0, 1);
+                updateProgress(0L, 1L);
 
                 byte[] contenidoLocal = new LocalDocumentRepository()
                         .obtenerContenidoArchivo(document.getId());
 
                 if (contenidoLocal != null && contenidoLocal.length > 0) {
-                    return descargarDesdeH2(contenidoLocal, document, mode, destination);
+                    return descargarDesdeH2(contenidoLocal, document, mode, destination,
+                            this::updateMessage,
+                            this::updateProgress);
                 }
 
-                return descargarDesdeServidor(document, mode, destination, this);
+                return descargarDesdeServidor(document, mode, destination,
+                        this::updateMessage,
+                        this::updateProgress);
             }
         };
     }
 
-    private File descargarDesdeH2(byte[] contenido, Document document, DownloadMode mode, Path destination)
+    private File descargarDesdeH2(byte[] contenido, Document document, DownloadMode mode, Path destination,
+                                   Consumer<String> onMessage, ProgressCallback onProgress)
             throws Exception {
 
         String nombreArchivo = resolverNombreArchivo(document.getName(), document.getType());
@@ -224,18 +231,22 @@ public class FileService {
             Files.writeString(destination.resolve(nombreArchivo + ".sha256"), document.getHashSha256());
         }
 
+        long size = contenido.length;
+        onMessage.accept("Completado desde caché: " + nombreArchivo);
+        onProgress.update(size, size);
         return archivoDestino.toFile();
     }
 
-    private File descargarDesdeServidor(Document document, DownloadMode mode, Path destination, Task<?> task)
+    private File descargarDesdeServidor(Document document, DownloadMode mode, Path destination,
+                                        Consumer<String> onMessage, ProgressCallback onProgress)
             throws Exception {
         ConnectionService conn = ConnectionService.getInstance();
         String clientId = conn.getClientId();
         Protocolo proto = resolveProtocolo();
         boolean esTcp = conn.getProtocol() == com.cliente.domain.enums.Protocol.TCP;
 
-        ((javafx.concurrent.Task<File>) task).updateMessage("Solicitando " + document.getName() + "...");
-        ((javafx.concurrent.Task<File>) task).updateProgress(0, 1);
+        onMessage.accept("Solicitando " + document.getName() + "...");
+        onProgress.update(0L, 1L);
 
         PayloadSolicitarStream solicitarPayload = new PayloadSolicitarStream(document.getId());
         Mensaje<PayloadSolicitarStream> solicitarMsg = ServerJsonUtil.buildRequest(
@@ -251,14 +262,14 @@ public class FileService {
         PayloadIniciarDescarga meta = ServerJsonUtil.convert(
                 solicitarResp.getMensaje().getPayload(), PayloadIniciarDescarga.class);
 
-        String transferId   = meta.getTransferId();
-        long   totalBytes   = meta.getTamanoTotal();
-        long   totalChunks  = meta.getTotalChunks();
-        String hashServidor = meta.getHashSha256();
+        String transferId    = meta.getTransferId();
+        long   totalBytes    = meta.getTamanoTotal();
+        long   totalChunks   = meta.getTotalChunks();
+        String hashServidor  = meta.getHashSha256();
         String nombreArchivo = resolverNombreArchivo(meta.getNombreArchivo(), meta.getExtension());
 
-        ((javafx.concurrent.Task<File>) task).updateMessage("Descargando " + nombreArchivo + "...");
-        ((javafx.concurrent.Task<File>) task).updateProgress(0, totalBytes);
+        onMessage.accept("Descargando " + nombreArchivo + "...");
+        onProgress.update(0L, totalBytes);
 
         Path archivoDestino = destination.resolve(nombreArchivo);
 
@@ -267,23 +278,23 @@ public class FileService {
             tcpClient.connect(conn.getHost(), conn.getPort());
             tcpClient.receiveFileStream(transferId, totalChunks, archivoDestino, totalBytes,
                     (recibidos, total) -> {
-                        ((javafx.concurrent.Task<File>) task).updateProgress(recibidos, total);
-                        ((javafx.concurrent.Task<File>) task).updateMessage(String.format(
-                                "Descargando %s... %.1f%%", nombreArchivo, (recibidos * 100.0) / total));
+                        onProgress.update(recibidos, total);
+                        onMessage.accept(String.format("Descargando %s... %.1f%%",
+                                nombreArchivo, (recibidos * 100.0) / total));
                     });
         } else {
             UdpSocketClient udpClient = new UdpSocketClient();
             udpClient.connect(conn.getHost(), conn.getPort());
             udpClient.receiveFileStreamUdp(transferId, totalChunks, archivoDestino, totalBytes,
                     (recibidos, total) -> {
-                        ((javafx.concurrent.Task<File>) task).updateProgress(recibidos, total);
-                        ((javafx.concurrent.Task<File>) task).updateMessage(String.format(
-                                "Descargando %s (UDP)... %.1f%%", nombreArchivo, (recibidos * 100.0) / total));
+                        onProgress.update(recibidos, total);
+                        onMessage.accept(String.format("Descargando %s (UDP)... %.1f%%",
+                                nombreArchivo, (recibidos * 100.0) / total));
                     });
         }
 
         if (hashServidor != null && !hashServidor.isBlank()) {
-            ((javafx.concurrent.Task<File>) task).updateMessage("Verificando integridad...");
+            onMessage.accept("Verificando integridad...");
             String hashLocal = calcularHash(archivoDestino);
             if (!hashLocal.equals(hashServidor)) {
                 Files.deleteIfExists(archivoDestino);
@@ -296,8 +307,8 @@ public class FileService {
             Files.writeString(destination.resolve(nombreArchivo + ".sha256"), hashServidor);
         }
 
-        ((javafx.concurrent.Task<File>) task).updateMessage("Completado: " + nombreArchivo);
-        ((javafx.concurrent.Task<File>) task).updateProgress(totalBytes, totalBytes);
+        onMessage.accept("Completado: " + nombreArchivo);
+        onProgress.update(totalBytes, totalBytes);
         return archivoDestino.toFile();
     }
 

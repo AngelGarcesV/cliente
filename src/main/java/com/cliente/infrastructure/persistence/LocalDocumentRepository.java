@@ -41,12 +41,12 @@ public class LocalDocumentRepository {
 
     public void guardarArchivoEnviado(String id, String remitente, String ipRemitente,
                                       String nombreArchivo, String extension, String rutaArchivo,
-                                      String hashSha256, String contenidoCifrado,
+                                      String hashSha256, String contenidoCifrado, byte[] contenido,
                                       long tamano, String servidorHost, int servidorPuerto) {
         String sql = "INSERT INTO archivos_enviados " +
                      "(id, remitente, ip_remitente, nombre_archivo, extension, ruta_archivo, " +
-                     "hash_sha256, contenido_cifrado, tamano, fecha_envio, servidor_host, servidor_puerto) " +
-                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                     "hash_sha256, contenido_cifrado, contenido, tamano, fecha_envio, servidor_host, servidor_puerto) " +
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try {
             Connection conn = H2DatabaseManager.getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -58,10 +58,11 @@ public class LocalDocumentRepository {
                 ps.setString(6, rutaArchivo);
                 ps.setString(7, hashSha256);
                 ps.setString(8, contenidoCifrado);
-                ps.setLong(9, tamano);
-                ps.setTimestamp(10, Timestamp.valueOf(LocalDateTime.now()));
-                ps.setString(11, servidorHost);
-                ps.setInt(12, servidorPuerto);
+                ps.setBytes(9, contenido);
+                ps.setLong(10, tamano);
+                ps.setTimestamp(11, Timestamp.valueOf(LocalDateTime.now()));
+                ps.setString(12, servidorHost);
+                ps.setInt(13, servidorPuerto);
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
@@ -84,10 +85,10 @@ public class LocalDocumentRepository {
     }
 
     public byte[] obtenerContenidoArchivo(String id) {
-        String sql = "SELECT contenido FROM archivos_enviados WHERE id = ? AND contenido IS NOT NULL";
+        String sqlPorId = "SELECT contenido FROM archivos_enviados WHERE id = ? AND contenido IS NOT NULL";
         try {
             Connection conn = H2DatabaseManager.getConnection();
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            try (PreparedStatement ps = conn.prepareStatement(sqlPorId)) {
                 ps.setString(1, id);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
