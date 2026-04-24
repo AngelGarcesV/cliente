@@ -17,16 +17,10 @@ public final class H2DatabaseManager {
 
     private H2DatabaseManager() {}
 
-    /**
-     * Devuelve una conexión compartida única al H2 embebido.
-     * Todas las operaciones usan la misma conexión, evitando el lock de archivo.
-     * Thread-safe: sincronizado con LOCK.
-     */
     public static Connection getConnection() throws SQLException {
         synchronized (LOCK) {
             if (sharedConnection == null || sharedConnection.isClosed()) {
                 sharedConnection = DriverManager.getConnection(URL, USER, PASSWORD);
-                LOG.info("Conexión H2 establecida");
             }
             return sharedConnection;
         }
@@ -61,12 +55,16 @@ public final class H2DatabaseManager {
                             ruta_archivo CLOB,
                             hash_sha256 VARCHAR(88),
                             contenido_cifrado LONGVARCHAR,
+                            contenido BLOB,
                             tamano BIGINT NOT NULL,
                             fecha_envio TIMESTAMP NOT NULL,
                             servidor_host VARCHAR(255),
                             servidor_puerto INT
                         )
                     """);
+                    try {
+                        stmt.execute("ALTER TABLE archivos_enviados ADD COLUMN IF NOT EXISTS contenido BLOB");
+                    } catch (Exception ignored) {}
                 }
             } catch (SQLException e) {
                 throw new RuntimeException("Error inicializando H2", e);
@@ -82,7 +80,6 @@ public final class H2DatabaseManager {
                         stmt.execute("SHUTDOWN");
                     }
                     sharedConnection = null;
-                    LOG.info("Conexión H2 cerrada");
                 }
             } catch (SQLException e) {
                 LOG.log(Level.WARNING, "Error cerrando H2: " + e.getMessage(), e);

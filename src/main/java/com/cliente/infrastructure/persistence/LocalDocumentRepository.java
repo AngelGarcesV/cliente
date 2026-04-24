@@ -69,6 +69,38 @@ public class LocalDocumentRepository {
         }
     }
 
+    public void guardarContenidoArchivo(String id, byte[] contenido) {
+        String sql = "UPDATE archivos_enviados SET contenido = ? WHERE id = ?";
+        try {
+            Connection conn = H2DatabaseManager.getConnection();
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setBytes(1, contenido);
+                ps.setString(2, id);
+                ps.executeUpdate();
+            }
+        } catch (SQLException e) {
+            LOG.log(Level.WARNING, "Error guardando contenido binario en H2: " + e.getMessage(), e);
+        }
+    }
+
+    public byte[] obtenerContenidoArchivo(String id) {
+        String sql = "SELECT contenido FROM archivos_enviados WHERE id = ? AND contenido IS NOT NULL";
+        try {
+            Connection conn = H2DatabaseManager.getConnection();
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, id);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        return rs.getBytes("contenido");
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            LOG.log(Level.WARNING, "Error leyendo contenido binario desde H2: " + e.getMessage(), e);
+        }
+        return null;
+    }
+
     public List<Map<String, Object>> listarMensajesEnviados() {
         String sql = "SELECT id, autor, ip_remitente, contenido, hash_sha256, " +
                      "fecha_envio, servidor_host, servidor_puerto " +

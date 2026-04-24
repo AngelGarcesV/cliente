@@ -59,24 +59,6 @@ public class FileService {
         return ServerJsonUtil.convertList(resp.getMensaje().getPayload(), Document.class);
     }
 
-    /**
-     * Crea una tarea de subida de archivo que usa streaming real por chunks binarios.
-     *
-     * Flujo de tres fases:
-     *
-     * FASE 1 — INICIAR_STREAM (JSON de control)
-     *   El cliente notifica al servidor el nombre, tamaño, y cantidad de chunks.
-     *   El servidor crea el archivo temporal y responde con el transferId confirmado.
-     *
-     * FASE 2 — Chunks binarios
-     *   TCP: conexión persistente, frame por chunk, ACK por chunk.
-     *   UDP: datagrama por chunk, ACK stop-and-wait con reintentos.
-     *   En paralelo se calcula el SHA-256 incremental del archivo completo.
-     *
-     * FASE 3 — FINALIZAR_STREAM (JSON de control)
-     *   El cliente envía el hash SHA-256 final. El servidor valida, mueve el archivo
-     *   temporal a su nombre definitivo y persiste en base de datos.
-     */
     public Task<Void> createUploadTask(File file) {
         return new Task<>() {
             @Override
@@ -95,7 +77,6 @@ public class FileService {
                 updateMessage("Iniciando envío de " + file.getName() + "...");
                 updateProgress(0, fileSize);
 
-                // ── FASE 1: INICIAR_STREAM ─────────────────────────────────────────────
                 PayloadIniciarStream iniciarPayload = new PayloadIniciarStream(
                         transferId, file.getName(), ext, fileSize, totalChunks, chunkSize);
                 Mensaje<PayloadIniciarStream> iniciarMsg = ServerJsonUtil.buildRequest(
@@ -108,7 +89,6 @@ public class FileService {
                     throw new IOException("El servidor rechazó INICIAR_STREAM: " + err);
                 }
 
-                // ── FASE 2: Chunks binarios con SHA-256 incremental ───────────────────
                 updateMessage("Enviando " + file.getName() + "...");
                 String hashFinal = enviarChunks(conn, transferId, file, fileSize, chunkSize, esTcp,
                         (enviados, total) -> {
@@ -119,7 +99,6 @@ public class FileService {
 
                 if (isCancelled()) return null;
 
-                // ── FASE 3: FINALIZAR_STREAM ──────────────────────────────────────────
                 updateMessage("Verificando integridad de " + file.getName() + "...");
                 PayloadFinalizarStream finalizarPayload = new PayloadFinalizarStream(
                         transferId, hashFinal, totalChunks);
@@ -136,33 +115,36 @@ public class FileService {
                 updateMessage("Completado: " + file.getName());
                 updateProgress(fileSize, fileSize);
 
-                // Persistir localmente en H2 de forma asíncrona — no bloquea el hilo de la tarea
-                String snapshotId     = transferId;
-                String snapshotName   = file.getName();
-                String snapshotExt    = ext;
-                long   snapshotSize   = fileSize;
-                String snapshotHost   = conn.getHost();
-                int    snapshotPort   = conn.getPort();
-                String snapshotHash   = hashFinal;
-                String snapshotUser   = conn.getUsername();
+                String snapshotId   = transferId;
+                String snapshotName = file.getName();
+                String snapshotExt  = ext;
+                long   snapshotSize = fileSize;
+                String snapshotHost = conn.getHost();
+                int    snapshotPort = conn.getPort();
+                String snapshotHash = hashFinal;
+                String snapshotUser = conn.getUsername();
+                byte[] snapshotBytes;
+                try {
+                    snapshotBytes = Files.readAllBytes(file.toPath());
+                } catch (Exception ex) {
+                    LOG.log(Level.WARNING, "No se pudo leer el archivo para guardarlo en H2: " + ex.getMessage(), ex);
+                    snapshotBytes = null;
+                }
+                final byte[] contenidoFinal = snapshotBytes;
 
                 CompletableFuture.runAsync(() -> {
                     try {
-                        new LocalDocumentRepository().guardarArchivoEnviado(
-                                snapshotId,
-                                snapshotUser,
-                                null,           // ip_remitente: no disponible en el cliente
-                                snapshotName,
-                                snapshotExt,
-                                null,           // ruta_archivo: el cliente no conoce la ruta en el servidor
-                                snapshotHash,
-                                null,           // contenido_cifrado: no disponible en el cliente
-                                snapshotSize,
-                                snapshotHost,
-                                snapshotPort
-                        );
+                        LocalDocumentRepository repo = new LocalDocumentRepository();
+                        repo.guardarArchivoEnviado(
+                                snapshotId, snapshotUser, null,
+                                snapshotName, snapshotExt, null,
+                                snapshotHash, null,
+                                snapshotSize, snapshotHost, snapshotPort);
+                        if (contenidoFinal != null) {
+                            repo.guardarContenidoArchivo(snapshotId, contenidoFinal);
+                        }
                     } catch (Exception e) {
-                        LOG.log(Level.WARNING, "Error persistiendo archivo en H2 (no-bloqueante): " + e.getMessage(), e);
+                        LOG.log(Level.WARNING, "Error persistiendo archivo en H2: " + e.getMessage(), e);
                     }
                 });
 
@@ -171,31 +153,19 @@ public class FileService {
         };
     }
 
-    /**
-     * Envía los chunks del archivo y calcula el SHA-256 en un solo paso.
-     *
-     * Estrategia: DigestInputStream envuelve el FileInputStream original.
-     * Los sockets reciben un FileInputStream anónimo que delega al DigestInputStream,
-     * de modo que cada byte leído alimenta el digest automáticamente.
-     * No se lee el archivo dos veces.
-     *
-     * @return hash SHA-256 del archivo completo en Base64
-     */
     private String enviarChunks(ConnectionService conn, String transferId, File file,
                                 long fileSize, int chunkSize, boolean esTcp,
                                 TcpSocketClient.StreamProgressCallback progressCb) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
 
-        // DigestInputStream sobre el FIS real — UN solo flujo de lectura
         FileInputStream fis = new FileInputStream(file);
         DigestInputStream dis = new DigestInputStream(fis, digest);
 
-        // FileInputStream "puente" que delega todas las lecturas al DigestInputStream
         FileInputStream puente = new FileInputStream(file) {
-            @Override public int read() throws IOException                         { return dis.read(); }
-            @Override public int read(byte[] b) throws IOException                 { return dis.read(b); }
+            @Override public int read() throws IOException                          { return dis.read(); }
+            @Override public int read(byte[] b) throws IOException                  { return dis.read(b); }
             @Override public int read(byte[] b, int off, int len) throws IOException { return dis.read(b, off, len); }
-            @Override public void close() throws IOException                       { dis.close(); }
+            @Override public void close() throws IOException                        { dis.close(); }
         };
 
         try (puente) {
@@ -213,115 +183,131 @@ public class FileService {
         return Base64.getEncoder().encodeToString(digest.digest());
     }
 
-    /**
-     * Descarga un archivo del servidor usando streaming real por chunks binarios.
-     *
-     * Flujo de dos fases:
-     *
-     * FASE 1 — SOLICITAR_STREAM (JSON de control)
-     *   El cliente pide el archivo por ID. El servidor responde con los metadatos:
-     *   transferId, nombre, tamaño, totalChunks, hash SHA-256.
-     *
-     * FASE 2 — Chunks binarios
-     *   TCP: el cliente abre una segunda conexión con señal 0x03 + transferId.
-     *        El servidor envía los chunks y el cliente responde ACK por cada uno.
-     *   UDP: el cliente envía un datagrama con señal 0x03 + transferId.
-     *        El servidor envía cada chunk, el cliente responde ACK.
-     *
-     * Al terminar, valida el hash SHA-256 contra el que devolvió el servidor.
-     */
     public Task<File> createDownloadTask(Document document, DownloadMode mode, Path destination) {
         return new Task<>() {
             @Override
             protected File call() throws Exception {
-                ConnectionService conn = ConnectionService.getInstance();
-                String clientId = conn.getClientId();
-                Protocolo proto = resolveProtocolo();
-                boolean esTcp = conn.getProtocol() == com.cliente.domain.enums.Protocol.TCP;
-
-                updateMessage("Solicitando " + document.getName() + "...");
+                updateMessage("Buscando " + document.getName() + " en caché local...");
                 updateProgress(0, 1);
 
-                // ── FASE 1: SOLICITAR_STREAM ───────────────────────────────────────────
-                PayloadSolicitarStream solicitarPayload = new PayloadSolicitarStream(document.getId());
-                Mensaje<PayloadSolicitarStream> solicitarMsg = ServerJsonUtil.buildRequest(
-                        Accion.SOLICITAR_STREAM, solicitarPayload, clientId, proto);
+                byte[] contenidoLocal = new LocalDocumentRepository()
+                        .obtenerContenidoArchivo(document.getId());
 
-                Respuesta<?> solicitarResp = conn.send(solicitarMsg);
-                if (solicitarResp.getEstado() == Estado.ERROR) {
-                    String err = solicitarResp.getError() != null
-                            ? solicitarResp.getError().getMensaje() : "Error desconocido";
-                    throw new IOException("El servidor rechazó la descarga: " + err);
+                if (contenidoLocal != null && contenidoLocal.length > 0) {
+                    return descargarDesdeH2(contenidoLocal, document, mode, destination);
                 }
 
-                PayloadIniciarDescarga meta = ServerJsonUtil.convert(
-                        solicitarResp.getMensaje().getPayload(), PayloadIniciarDescarga.class);
-
-                String transferId  = meta.getTransferId();
-                long   totalBytes  = meta.getTamanoTotal();
-                long   totalChunks = meta.getTotalChunks();
-                String hashServidor = meta.getHashSha256();
-                String nombreBase  = meta.getNombreArchivo();
-                String extension   = meta.getExtension();
-
-                // Reconstruir nombre completo con extensión si no la trae ya incluida
-                String nombreArchivo = (extension != null && !extension.isBlank()
-                        && !nombreBase.endsWith("." + extension))
-                        ? nombreBase + "." + extension
-                        : nombreBase;
-
-                updateMessage("Descargando " + nombreArchivo + "...");
-                updateProgress(0, totalBytes);
-
-                // ── FASE 2: Chunks binarios ────────────────────────────────────────────
-                Path archivoDestino = destination.resolve(nombreArchivo);
-
-                MessageDigest digest = MessageDigest.getInstance("SHA-256");
-
-                if (esTcp) {
-                    TcpSocketClient tcpClient = new TcpSocketClient();
-                    tcpClient.connect(conn.getHost(), conn.getPort());
-                    tcpClient.receiveFileStream(transferId, totalChunks, archivoDestino, totalBytes,
-                            (recibidos, total) -> {
-                                updateProgress(recibidos, total);
-                                updateMessage(String.format("Descargando %s... %.1f%%",
-                                        nombreArchivo, (recibidos * 100.0) / total));
-                            });
-                } else {
-                    UdpSocketClient udpClient = new UdpSocketClient();
-                    udpClient.connect(conn.getHost(), conn.getPort());
-                    udpClient.receiveFileStreamUdp(transferId, totalChunks, archivoDestino, totalBytes,
-                            (recibidos, total) -> {
-                                updateProgress(recibidos, total);
-                                updateMessage(String.format("Descargando %s (UDP)... %.1f%%",
-                                        nombreArchivo, (recibidos * 100.0) / total));
-                            });
-                }
-
-                // ── Validar hash SHA-256 ───────────────────────────────────────────────
-                if (hashServidor != null && !hashServidor.isBlank()) {
-                    updateMessage("Verificando integridad...");
-                    String hashLocal = calcularHash(archivoDestino);
-                    if (!hashLocal.equals(hashServidor)) {
-                        Files.deleteIfExists(archivoDestino);
-                        throw new IOException("El archivo descargado está corrupto " +
-                                "(hash SHA-256 no coincide). Se eliminó el archivo parcial.");
-                    }
-                }
-
-                // ── Modo HASH — guardar archivo .sha256 adicional ─────────────────────
-                if (mode == DownloadMode.HASH && hashServidor != null && !hashServidor.isBlank()) {
-                    Files.writeString(destination.resolve(nombreArchivo + ".sha256"), hashServidor);
-                }
-
-                updateMessage("Completado: " + nombreArchivo);
-                updateProgress(totalBytes, totalBytes);
-                return archivoDestino.toFile();
+                return descargarDesdeServidor(document, mode, destination, this);
             }
         };
     }
 
-    /** Calcula SHA-256 de un archivo en disco en Base64, leyendo en chunks de 2MB. */
+    private File descargarDesdeH2(byte[] contenido, Document document, DownloadMode mode, Path destination)
+            throws Exception {
+
+        String nombreArchivo = resolverNombreArchivo(document.getName(), document.getType());
+        Path archivoDestino = destination.resolve(nombreArchivo);
+
+        Files.write(archivoDestino, contenido);
+
+        if (document.getHashSha256() != null && !document.getHashSha256().isBlank()) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update(contenido);
+            String hashLocal = Base64.getEncoder().encodeToString(digest.digest());
+            if (!hashLocal.equals(document.getHashSha256())) {
+                Files.deleteIfExists(archivoDestino);
+                throw new IOException("El archivo en caché local está corrupto (hash SHA-256 no coincide).");
+            }
+        }
+
+        if (mode == DownloadMode.HASH && document.getHashSha256() != null && !document.getHashSha256().isBlank()) {
+            Files.writeString(destination.resolve(nombreArchivo + ".sha256"), document.getHashSha256());
+        }
+
+        return archivoDestino.toFile();
+    }
+
+    private File descargarDesdeServidor(Document document, DownloadMode mode, Path destination, Task<?> task)
+            throws Exception {
+        ConnectionService conn = ConnectionService.getInstance();
+        String clientId = conn.getClientId();
+        Protocolo proto = resolveProtocolo();
+        boolean esTcp = conn.getProtocol() == com.cliente.domain.enums.Protocol.TCP;
+
+        ((javafx.concurrent.Task<File>) task).updateMessage("Solicitando " + document.getName() + "...");
+        ((javafx.concurrent.Task<File>) task).updateProgress(0, 1);
+
+        PayloadSolicitarStream solicitarPayload = new PayloadSolicitarStream(document.getId());
+        Mensaje<PayloadSolicitarStream> solicitarMsg = ServerJsonUtil.buildRequest(
+                Accion.SOLICITAR_STREAM, solicitarPayload, clientId, proto);
+
+        Respuesta<?> solicitarResp = conn.send(solicitarMsg);
+        if (solicitarResp.getEstado() == Estado.ERROR) {
+            String err = solicitarResp.getError() != null
+                    ? solicitarResp.getError().getMensaje() : "Error desconocido";
+            throw new IOException("El servidor rechazó la descarga: " + err);
+        }
+
+        PayloadIniciarDescarga meta = ServerJsonUtil.convert(
+                solicitarResp.getMensaje().getPayload(), PayloadIniciarDescarga.class);
+
+        String transferId   = meta.getTransferId();
+        long   totalBytes   = meta.getTamanoTotal();
+        long   totalChunks  = meta.getTotalChunks();
+        String hashServidor = meta.getHashSha256();
+        String nombreArchivo = resolverNombreArchivo(meta.getNombreArchivo(), meta.getExtension());
+
+        ((javafx.concurrent.Task<File>) task).updateMessage("Descargando " + nombreArchivo + "...");
+        ((javafx.concurrent.Task<File>) task).updateProgress(0, totalBytes);
+
+        Path archivoDestino = destination.resolve(nombreArchivo);
+
+        if (esTcp) {
+            TcpSocketClient tcpClient = new TcpSocketClient();
+            tcpClient.connect(conn.getHost(), conn.getPort());
+            tcpClient.receiveFileStream(transferId, totalChunks, archivoDestino, totalBytes,
+                    (recibidos, total) -> {
+                        ((javafx.concurrent.Task<File>) task).updateProgress(recibidos, total);
+                        ((javafx.concurrent.Task<File>) task).updateMessage(String.format(
+                                "Descargando %s... %.1f%%", nombreArchivo, (recibidos * 100.0) / total));
+                    });
+        } else {
+            UdpSocketClient udpClient = new UdpSocketClient();
+            udpClient.connect(conn.getHost(), conn.getPort());
+            udpClient.receiveFileStreamUdp(transferId, totalChunks, archivoDestino, totalBytes,
+                    (recibidos, total) -> {
+                        ((javafx.concurrent.Task<File>) task).updateProgress(recibidos, total);
+                        ((javafx.concurrent.Task<File>) task).updateMessage(String.format(
+                                "Descargando %s (UDP)... %.1f%%", nombreArchivo, (recibidos * 100.0) / total));
+                    });
+        }
+
+        if (hashServidor != null && !hashServidor.isBlank()) {
+            ((javafx.concurrent.Task<File>) task).updateMessage("Verificando integridad...");
+            String hashLocal = calcularHash(archivoDestino);
+            if (!hashLocal.equals(hashServidor)) {
+                Files.deleteIfExists(archivoDestino);
+                throw new IOException("El archivo descargado está corrupto " +
+                        "(hash SHA-256 no coincide). Se eliminó el archivo parcial.");
+            }
+        }
+
+        if (mode == DownloadMode.HASH && hashServidor != null && !hashServidor.isBlank()) {
+            Files.writeString(destination.resolve(nombreArchivo + ".sha256"), hashServidor);
+        }
+
+        ((javafx.concurrent.Task<File>) task).updateMessage("Completado: " + nombreArchivo);
+        ((javafx.concurrent.Task<File>) task).updateProgress(totalBytes, totalBytes);
+        return archivoDestino.toFile();
+    }
+
+    private String resolverNombreArchivo(String nombreBase, String extension) {
+        if (extension != null && !extension.isBlank() && !nombreBase.endsWith("." + extension)) {
+            return nombreBase + "." + extension;
+        }
+        return nombreBase;
+    }
+
     private String calcularHash(Path archivo) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         byte[] buffer = new byte[2 * 1024 * 1024];
